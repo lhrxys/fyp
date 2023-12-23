@@ -7,7 +7,9 @@ window.onload = () => {
       images.append(img);
       img.onload = () => {
         process_img(img);
+        console.log("processed img");
         loopImage();
+        findVertices();
         show();
       };
       img.src = URL.createObjectURL(input.files[0]);
@@ -17,11 +19,8 @@ window.onload = () => {
 let pic = []; 
 let size = []; // stores size of image for easy ref
 let possible = []; // stores possible convolutions that may contain a vertex
-
-// just for debugging
-let allSquares = [];
-let checkNum = [];
-let allBorders = [];
+let unexplored = new Set;
+let edges = new Map;
 
 const process_img = (img) => {
     const w = 400;
@@ -38,131 +37,167 @@ const process_img = (img) => {
     context.drawImage(img, 0, 0, w, h);
 
     // add a 5px white border around image
-    context.strokeStyle = "white";
-    context.lineWidth = 5;
-    context.strokeRect(1, 1, w, h);
+    //context.strokeStyle = "white";
+    //context.lineWidth = 5;
+    //context.strokeRect(1, 1, w, h);
       
     const frame = context.getImageData(0, 0, w, h);
     const data = frame.data;
     canvas.setAttribute("id", "original");
       
     pic = [];
+    unexplored.clear();
+    edges.clear();
     for (let y = 0; y < h; ++y) {
         pic[y] = [];
-        
         for (let x = 0; x < w; ++x) {
             // turns the image into black and white (not greyscale)
             const i = (w*y + x) << 2;
             const [r, g, b, a] = [0, 1, 2, 3].map(j => data[i + j]);
-            //changes to white if avg is more than 230 
-            const v = (Math.floor((r + g + b)/3) > 230) ? 255 : 0;
+            //changes to white if avg is more than 200 
+            const v = (Math.floor((r + g + b)/3) > 220) ? 255 : 0;
             
             const color = [v, v, v, 255];
             color.forEach((c, j) => data[i + j] = c);
             pic[y].push(v); //add pixel to data array
+            unexplored.add(`${y}c${x}`);
         };
     };
       
     //255 white, 0 black
     context.putImageData(frame, 0, 0);
 };
-  
-  
+
+let faces = new Map;
+
+/*
+for (let x = 0; x < 5; x++) {
+  for (let y = 0; y < 5; y++) {
+    unexplored.set(`${x}c${y}`, true);
+  };
+};
+*/
 const loopImage = () => {
-  let m = [0, 10, -5, 5]; // xstart, xend, ystart, yend
-  possible = [];
-  allSquares = [];
-  checkNum = [];
-  allBorders = [];
+  faces.clear();
 
-  for (let i = 0; i < (size[1]-5); i+=5) {
-    for (let j = 0; j < 395; j+=5) {
-      [m[2], m[3]] = [m[2]+5, m[3]+5]; // increment ystart and yend
-      let sq = pic.slice(m[0], m[1]).map(i => i.slice(m[2], m[3]));
-      let num = checkSquare(sq);
-      if (num > 2) {
-        let copy = m.slice();
-        possible.push(copy);
-        allSquares.push(sq);
-        checkNum.push(num);
+  let n = 0; // number of white regions
+  while (unexplored.size > 0) {
+    // get current first key in unexplored
+    let check = unexplored.values().next().value.split("c");
+    let xs = Number(check[0]);
+    let ys = Number(check[1]);
+    if (pic[xs][ys] == 255) {
+      flood(xs, ys, n);
+      if (faces.get(n).length < 10) { //get rid of stray cases with less than 10 px in face
+        faces.delete(n)
+        continue;
       };
-      //console.log(m);
-    };
-    
-    [m[2], m[3]] = [-5, 5]; // reset ystart and yend
-    m[0] += 5; // increment xstart
-    
-    // increment xend by less than 10 if close to end
-    if (size[1] - m[1] < 5) {
-      m[1] += (size[1]-m[1]);
-      continue;
-    };
-
-    m[1] += 5; // increment xend
-    
-  };
-};
-  
-  
-const checkSquare = (square) => {
-  let borders = [];
-  let n = 0;
-  let prev_pixel = false;
-  let rows = square.length;
-  let cols = square[0].length;
-  
-  // push the pixels belonging to the borders of the square
-  square[0].forEach((c) => borders.push(c));
-  for (let i = 1; i < (rows - 1); i++) {
-    borders.push(square[i][cols - 1]);
-  };
-
-  square[rows-1].slice().reverse().forEach(c => borders.push(c));
-  for (let i = (rows - 2); i > 0; i--) {
-    borders.push(square[i][0]);
-  };
-  
-  // stores color of first pixel: black = true
-  let firstPixel = (borders[0] < 127) ? true : false; 
-  
-  for (let i = 0; i < borders.length; i++) {
-    
-    // current pixel is white
-    if (borders[i] > 160) {
-      prev_pixel = false;
-      continue;
-    }
-
-    // current pixel is black and prev pixel is not black
-    if (prev_pixel == false) {
-      // current pixel is pixel near top left, and first pixel is black
-      if ((i == borders.length-1) && firstPixel == true) { continue; }
       n += 1;
-      prev_pixel = true;
       continue;
-    }
-    
-    // both current pixel and prev pixel are black
-    if (prev_pixel == true) { 
-      // "last" pixel is black and first pixel is also black
-      if ((i == borders.length-1) && firstPixel == true) { n -= 1; } 
-      continue; 
-    }
-  }
-  if (n > 2) { 
-    allBorders.push(borders);
-  }
-  return n;
-};  
-
-// checks if the black pixels in subwindow are connnected - IN PROGRESS
-const connected = (squares) => {
-  for (let i = 0; i < squares.length; i++) {
-
+    };
+    unexplored.delete(`${xs}c${ys}`); // removes from unexplored if black pixel
   };
 };
 
-  // shows the identified areas
+const flood = (r, c, n) => {
+  let queue = [[r, c]];
+  faces.set(n, [`${r}c${c}`]);
+
+
+  while (queue.length > 0) {
+    let current = queue.shift();
+    let row = current[0];
+    let col = current[1];
+    
+    unexplored.delete(`${row}c${col}`);
+
+    // find neighbours of pixel which existl
+    let neighbours = [[row-1, col], [row, col-1], [row, col+1], [row+1, col]];
+    if ((row-1 < 0) || (row+1 > size[1]-1)) {
+      let remove = (row-1 < 0) ? (row-1) : (row+1);
+      neighbours = neighbours.filter(n => (n[0] != remove));
+    };
+
+    if ((col-1 < 0) || (col+1 > size[0]-1)) {
+      let remove = (col-1 < 0) ? (col-1) : (col+1);
+      neighbours = neighbours.filter(n => (n[1] != remove));
+    };
+    
+    //console.log(current);
+    //console.log(neighbours);
+  
+    
+    for (let j = 0; j < neighbours.length; j++) {
+      let currN = neighbours[j];
+      let xn = currN[0];
+      let yn = currN[1];
+      if (pic[xn][yn] == 0){
+        markBorder(xn, yn, n);
+      };
+
+      // skip if pixel was explored
+      if (!unexplored.has(`${xn}c${yn}`)) {continue;}
+
+      // skip if pixel already in queue
+      let queueString = JSON.stringify(queue);
+      let currString = JSON.stringify(currN);
+      if (queueString.includes(currString)) {continue;}
+
+      if (pic[xn][yn] == 255) { // if pixel is white + not in queue/explored --> push to queue
+        faces.get(n).push(`${xn}c${yn}`);
+        queue.push(currN);
+        continue;
+      };
+      unexplored.delete(`${xn}c${yn}`); // push to explored if pixel is black (will not be added to queue)
+    };
+    //console.log(explored);
+  };
+  console.log(`done with face ${n}`);
+  return(faces);
+  
+};
+
+const markBorder = (x, y, n) => {
+  const add = [-3, -2, -1, 0, 1, 2, 3];
+  const horizontal = add.map((col) => col + y);
+  const vertical = add.map((row) => row + x);
+
+  for (let i = 0; i < 7; i++) {
+    let h = horizontal[i];
+    if (h < 0 || h > size[0]-1 || pic[x][h] != 0) {continue;}
+    
+    let pixelkey = `${x}c${h}`; 
+    if (!edges.has(pixelkey)){
+      edges.set(pixelkey, [n]);
+    } else if (!edges.get(pixelkey).includes(n)){
+      edges.get(pixelkey).push(n);
+    };
+  };
+  
+  for (let i = 0; i < 7; i++) {
+    let v = vertical[i];
+    if (v < 0 || v > size[1]-1 || pic[v][y] != 0) {continue;}
+    
+    let pixelkey = `${v}c${y}`; 
+    if (!edges.has(pixelkey)){
+      edges.set(pixelkey, [n]);
+    } else if (!edges.get(pixelkey).includes(n)){
+      edges.get(pixelkey).push(n);
+    };
+  };
+};
+
+let vertices = [];
+const findVertices = () => {
+  vertices = [];
+  edges.forEach((totalFaces, pixel) => {
+    if (totalFaces.length > 2) {
+      vertices.push(pixel);
+    };
+  });
+};
+
+// shows the identified areas
 const show = () => {
   const canvas = document.createElement("canvas");
   images.append(canvas);
@@ -176,29 +211,15 @@ const show = () => {
     
   const frame = context.getImageData(0, 0, size[0], size[1]);
   const data = frame.data;
-    
-  for (let i = 0; i < possible.length; i++) {
-    let currSquare = possible[i];
-    for (let x = currSquare[0]; x < (currSquare[1]+1); x++) {
-      for (let y = currSquare[2]; y < (currSquare[3]+1); y++) {
-        const i = (size[0]*x + y) << 2;
-        if (data[i] < 127) { continue; }; //skip if dark colored pixel
-        
-        let [r, g, b, a] = [0, 1, 2, 3].map(j => data[i + j]);
-        // if pixel is already orange
-        if ([r, g, b] == [255, 165, 0]) {
-          data[i+3] += 50;
-          continue;
-        };
-          
-        // if pixel is not orange
-        const orange = [255, 165, 0, 100];
-        orange.forEach((c, j) => data[i + j] = c);
-        
-      };
-    };
+  
+  for (let i = 0; i < vertices.length; i++) {
+    let row = Number(vertices[i].split("c")[0]);
+    let col = Number(vertices[i].split("c")[1]);
+    const p = (size[0]*row + col) << 2;
+    const red = [255, 0, 0, 255];
+    red.forEach((c, j) => data[p + j] = c);
   };
- 
+  
   context.putImageData(frame, 0, 0);
 };
     

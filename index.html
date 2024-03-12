@@ -1,12 +1,20 @@
 <head>
     <meta charset="UTF-8" />
-    <title>Vertex Identifier</title>
+    <title>Raster CP Converter</title>
     <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 
 <body>
-    <h3>Vertex Identifier</h3>
+    <h2>Raster CP Converter</h2>
     <input id="input" type="file" accept="image/png, image/jpeg">
+    &nbsp;
+    <button id="find">Find threshold</button>
+    &nbsp;
+    Threshold size:
+    <input type="number" id="threshold" min="1" value="5">
+    &nbsp;
+    <button id="process">Process image</button>
+    
     <br />
     <div id="images"></div>
     <script src="index.js"></script>

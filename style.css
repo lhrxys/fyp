@@ -1,14 +1,26 @@
-body {
-  background: lightgray;
+h2 {
+  text-align: center;
 }
 
-input {
-    display: block;
-  }
+body {
+  background: lightgray;
+  text-align: center;
+}
+
+input[type=file]{
+    display: inline-block;
+    width: 15em;
+}
+
+input[type=number]{
+  display: inline-block;
+  width: 3em;
+}
 
 div {
   display: block;
   position: absolute;
   top: 100px;
   left: 70px;
+  margin: 0 auto;
 }

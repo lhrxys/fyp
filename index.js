@@ -65,6 +65,7 @@ window.onload = () => {
     connect();
     //connect2();
     shrink();
+    evaluate();
     show_vertices();
   };
 
@@ -118,8 +119,10 @@ const process_img = (img) => {
             // turns the image into black and white (not greyscale)
             const i = ((w+10)*y + x) << 2;
             const [r, g, b, a] = [0, 1, 2, 3].map(j => data[i + j]);
-            //changes to white if avg is more than 200 
-            const v = (Math.floor((r + g + b)/3) > 190) ? 255 : 0;
+            //changes to white if avg is more than a value
+            // value for checking against fold files = 240
+            // normal values = 200?
+            const v = (Math.floor((r + g + b)/3) > 200) ? 255 : 0;
             
             const color = [v, v, v, 255];
             color.forEach((c, j) => data[i + j] = c);
@@ -180,7 +183,6 @@ const flood = (r, c, n) => {
     let col = queue[i][1];
     i += 1;
 
-    //CHANGE BELOW LINE
     let neighbours = [[-1, 0], [0, -1], [0, 1], [1, 0]];
     for (const pixel of neighbours) {
       // extract out the neighbour pixel coords
@@ -211,7 +213,6 @@ const flood = (r, c, n) => {
 };
 
 let vertex_faces = new Map; // key: [row, col]; value: nearbyFaces
-let vertex_dist = new Map;
 const check = (thres) => { // checks which black pixels are vertices for given threshold
   verticesSet.clear(); // same as vertices but in a set
   vertices = [];
@@ -256,13 +257,11 @@ const check = (thres) => { // checks which black pixels are vertices for given t
       };
     };
     
-    
+    // pixel is a vertex pixel if more than 3 faces
     if (nearbyFaces.size > 2) {
       vertices.push(pixel);
       verticesSet.add(`${r}c${c}`);
-      //nearbyFaces.add(i);
-      vertex_faces.set(`${r}c${c}`, nearbyFaces); //need to change to update the distance d
-      vertex_dist.set(`${r}c${c}`, d);
+      vertex_faces.set(`${r}c${c}`, nearbyFaces);
     };
   };
 };
@@ -370,56 +369,6 @@ const connect = () => {
   };
 };
 
-// trying with a different approach to compare results
-let connections = new Map;
-const connect2 = () => {
-  connections.clear();
-  let vertex_queue = [];
-  for (let num = 1; num < v.size+1; num++) {
-    connections.set(num, new Set);
-    vertex_queue.push(num);
-  };
-  
-
-  for (const current_vertex of vertex_queue) {
-    //console.log(current_vertex); 
-    let first = v.get(current_vertex)[0];
-    let queue = [first];
-    let j = 0;
-    let checked = new Set([`${first[0]}c${first[1]}`]);
-
-    while (j < queue.length) {
-      let row = queue[j][0];
-      let col = queue[j][1];
-      j+=1;
-
-      let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-      for (const n of neighbours) {
-        // coords of neighbour
-        let nRow = n[0] + row;
-        let nCol = n[1] + col;
-        let ex = explored[nRow][nCol];
-
-        // skip if alr checked or if part of face
-        if (checked.has(`${nRow}c${nCol}`) || ex[0] == "f") {continue};
-        
-        // add to queue and checked if edge pixel/part of current vertex
-        if (ex == true || ex == `v${current_vertex}`) {
-          checked.add(`${nRow}c${nCol}`);
-          queue.push([nRow, nCol]);
-          continue;
-        };
-
-        // add to connections if vertex not in there
-        if (!connections.get(current_vertex).has(Number(ex.slice(1)))) {
-          connections.get(current_vertex).add(Number(ex.slice(1)));
-        };
-
-      };
-    };
-  };
-};
-
 
 const highlight = (str) => {
   const a = str[0] == "f" ? faces : v;
@@ -463,51 +412,35 @@ const shrink = () => {
     const len = v.get(vert).length;
     let centroid_row = Math.floor(row/len);
     let centroid_col = Math.floor(col/len);
-    let queue = [];
 
-    //coords.push([centroid_row, centroid_col]);
-
-    
-    let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-    for (const n of neighbours) {
-      // coords of neighbour
-      let nRow = n[0] + centroid_row;
-      let nCol = n[1] + centroid_col;
-      if (explored[nRow][nCol][0] == "v") {
-        queue.push([nRow, nCol]);
+    // if the centroid is not a vertex pixel, find the nearest vertex pixel that is within 2 px of it
+    if (explored[centroid_row][centroid_col][0] != "v") {
+      let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1], 
+            [-2, -2], [-2, -1], [-2, 0], [-2, 1], [-2, 2], [-1, -2], [-1, 2], [0, -2], [0, 2], [1, -2], [1, -2],
+            [2, -2], [2, -1], [2, 0], [2, 1], [2, 2]];
+      for (const n of neighbours) {
+        // coords of neighbour
+        let nRow = n[0] + centroid_row;
+        let nCol = n[1] + centroid_col;
+        if (explored[nRow][nCol][0] == "v") {
+          centroid_row = nRow;
+          centroid_col = nCol;  
+        }
       };
     };
-    
-    // all surrounding pixels are vertices
-    if (queue.length == 8) {
-      coords.push([centroid_row, centroid_col]);
-      continue;
-    };
 
-    // no surronding pixels are vertices
-    if (queue.length == 0) {
-      const start_row = centroid_row-3;
-      const end_row = centroid_row+3;
-      const start_col = centroid_col-3;
-      const end_col = centroid_col+3;
-      let section = explored.slice(start_row, end_row+1).map(i => i.slice(start_col, end_col+1));
-      for (const section_row of section){
-        for (const p of section_row){
-          if (p[0] == "v") {queue.push()};
-        };
-      };
-    };
+    coords.push([centroid_row, centroid_col]);
+
     
   };
 };
 
 
-
 let coord2 = [];
 let others = new Map;
-const shrink2 = () => {
+const shrink2 = () => { // TO DELETE IN FINAL VERSION
   coord2 = [];
-  /* prev method of checking largest dist
+  /*
   for (let vert = 1; vert < (v.size+1); vert++) {
     let pixel = [];
     let largest_dist = 0;
@@ -558,11 +491,131 @@ const shrink2 = () => {
   };
   return(coord2);
   */
+
+  
   for (let vert = 1; vert < (v.size+1); vert++) {
-    const middle = Math.floor((v.get(vert).length)/2);
-    coord2.push(v.get(vert)[middle]);
+    let rows = [];
+    let cols = [];
+    for (const p of v.get(vert)) {
+      rows.push(p[0]);
+      cols.push(p[1]);
+    };
+    rows.toSorted((a, b) => a-b);
+    cols.toSorted((a, b) => a-b);
+    const middle = Math.floor(v.get(vert).length/2);
+    coord2.push([rows[middle], cols[middle]]);
   };
-  return(coord2);
+  
+};
+
+let corners = [];
+
+const reval = () => {
+  let row_max = 0;
+  let col_max = 0;
+  let row_min = 500;
+  let col_min = 500;
+  for (let i = 1; i < v.size+1; i++) {
+    for (const p of v.get(i)) {
+      if (p[0] > row_max) {row_max = p[0];}
+      if (p[0] < row_min) {row_min = p[0];}
+      if (p[1] > col_max) {col_max = p[1];}
+      if (p[1] < col_min) {col_min = p[1];}
+    };
+  };
+  corners = [[row_min, col_min], [row_min, col_max], [row_max, col_min], [row_max, col_max]];
+  /*
+  for (let i = 1; i < v.size+1; i++) {
+    const vertex = v.get(i);
+    let rows = [vertex[0], vertex[0]];
+    let cols = [vertex[0], vertex[0]];
+    for (const p of vertex) {
+      if (p[0] < rows[0][0]) {rows[0] = p;}
+      if (p[0] > rows[1][0]) {rows[1] = p;}
+      if (p[1] < cols[0][1]) {cols[0] = p;}
+      if (p[1] > cols[1][1]) {cols[1] = p;}
+    };
+    v_rows.push(rows);
+    v_cols.push(cols);
+  };
+  */
+};
+const evaluate = () => {
+  
+  
+  let corners = [blackPixels[0]];
+
+  let img_corners = [[0, size[0]-1], [size[1]-1, 0], [size[1]-1, size[0]-1]];
+  for (const c of img_corners) {
+    const cRow = c[0];
+    const cCol = c[1];
+    console.log([cRow, cCol]);
+    
+    if (pic[cRow][cCol][0] == 0) {
+      corners.push(c);
+      continue;
+    };
+    
+    corners.push(find_vertex(cRow, cCol));
+  };
+  
+  console.log(corners);
+  //show_corners(img_corners);
+  
+  // for removing any previously identified corner vertices
+  for (const i of corners) {
+    let has_vertex = false;
+    for (let j = 0; j < coords.length; j++) { // checks dist from corner pixel to vertex pixel
+      const p = coords[j];
+      const dist = Math.sqrt((p[0]-i[0])**2 + (p[1]-i[1])**2);
+      if (dist < 20) { // if too close, remove the vertex pixel and replace with corner pixel
+        has_vertex = true;
+        coords[j] = i;
+        break;
+      };
+    };
+    if (!has_vertex) {
+      coords.push(i);
+      graph.set(graph.size+1, new Set);
+    };
+  };
+};
+
+const find_vertex = (r, c) => {
+  let vertex = [];
+  let queue = [[r, c]];
+  let i = 0;
+  let checked = new Set([`${r}c${c}`]);
+  while (vertex.length == 0) {
+    // get pixel from queue
+    let row = queue[i][0];
+    let col = queue[i][1];
+    i += 1;
+
+    let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+    for (const n of neighbours) {
+      // coords of neighbour
+      let nRow = n[0] + row;
+      let nCol = n[1] + col;
+
+      // check if pixel exists
+      if (nRow < 0 || nRow > size[1]-1 || nCol < 0 || nCol > size[0]-1) {continue};
+      
+      // if exists, check if in queue/checked already
+      if (checked.has(`${nRow}c${nCol}`)) {continue};
+
+
+      if (pic[nRow][nCol] == 0) {
+        vertex.push(nRow, nCol);
+        break;
+      };
+
+      // add to queue
+      checked.add(`${nRow}c${nCol}`);
+      queue.push([nRow, nCol]);
+    };
+  };
+  return(vertex);
 };
 
 const show_vertices = () => {
@@ -600,5 +653,32 @@ const show_vertices = () => {
     };
   };
 
+  
+  context.putImageData(frame, 0, 0);
+};
+
+const show_corners = (corners) => {
+  const canvas = document.createElement("canvas");
+  images.append(canvas);
+  canvas.width = size[0];
+  canvas.height = size[1];
+  canvas.style.margin = "2px";
+    
+  const context = canvas.getContext("2d");
+  const orig = document.getElementById("original");
+  context.drawImage(orig, 0, 0);
+    
+  const frame = context.getImageData(0, 0, size[0], size[1]);
+  const data = frame.data;
+
+  for (let i = 0; i < corners.length; i++) {
+    const row = corners[i][0];
+    const col = corners[i][1];
+    
+    const p = (size[0]*row + col) << 2;
+    const red = [255, 0, 0, 255];
+    red.forEach((c, j) => data[p + j] = c);
+  };
+    
   context.putImageData(frame, 0, 0);
 };

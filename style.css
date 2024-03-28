@@ -17,10 +17,11 @@ input[type=number]{
   width: 3em;
 }
 
-div {
+#images {
   display: block;
   position: absolute;
   top: 100px;
   left: 70px;
-  margin: 0 auto;
+  margin: 5 auto;
 }
+

@@ -1,6 +1,7 @@
 window.onload = () => {
   const input = document.getElementById("input");
   const images = document.getElementById("images");
+  const status = document.getElementById("status");
 
   input.onchange = () => {
     images.replaceChildren();
@@ -8,12 +9,15 @@ window.onload = () => {
     images.append(img);
     img.onload = () => {
       process_img(img); // changes to b&w
-      console.log("processed img"); 
+      console.log("processed img");
+      status.textContent = "Status: Processed image, press `Find Threshold` button to continue";
       loopImage(); // finds faces in CP
     };
     img.src = URL.createObjectURL(input.files[0]);
+    
   };
 
+  /*
   const process_button = document.getElementById("process");
   process_button.onclick = () => {
     const input_thres = document.getElementById("threshold").value;
@@ -25,22 +29,6 @@ window.onload = () => {
     //show_color();
     shrink();
     show_vertices();
-  };
-
-  /*
-  const change_thres = document.getElementById("change_thres");
-  change_thres.onclick = () => {
-    thres_vertices = [];
-    let i = 1;
-    //for (let i = 1; i < 51; i++) {
-    while (true) {
-      check(i);
-      thres_vertices.push(countVertices());
-      console.log(`done with thres ${i}`);
-      if (thres_vertices[i-1] == 1 || i > 50) {break;}
-      i += 1;
-    };
-    
   };
   */
 
@@ -62,13 +50,39 @@ window.onload = () => {
       thres += 1;
     };
     show();
-    connect();
-    //connect2();
+    
     shrink();
-    evaluate();
+    const corners = find_corners(v);
+    change_corners(corners);
+    const boundary = find_boundary_vertices(v);
+    shift_boundary(boundary, corners);
     show_vertices();
+    standardise_coords(corners);
+    connect2();
+    status.textContent = "Status: Ready for FOLD file export";
   };
 
+  const exp = document.getElementById("export");
+  exp.onclick = () => {
+    let FOLD = {
+      file_spec: 1.2,
+      file_creator: "",
+      file_title: `${input.files.item(0).name}`,
+      file_classes: ["singleModel"],
+      vertices_coords: coords,
+      edges_vertices: graph2,
+    };
+  
+    const data = new Blob([JSON.stringify(FOLD, undefined, 2)], {type: "application/json"});
+    const url = URL.createObjectURL(data);
+  
+    const link = document.createElement("a");
+    const name = input.files.item(0).name.replace(/\.[^/.]+$/, "");
+    link.setAttribute("download", `${name}.fold`);
+    link.setAttribute("href", url);
+    link.click();
+    status.textContent = "Status: Exported FOLD file";
+  };
 };
   
 let pic = []; // stores all pixel values of image
@@ -77,7 +91,6 @@ let explored = []; // internal representation of image, updates the faces of whi
 let blackPixels = []; // array of all black pixels stored in [row, col]
 let vertices = []; // array of vertex coordinates
 let verticesSet = new Set; // same as vertices but in Set datastructure
-let thres_vertices = [];
 let graph = new Map; // key: vertex number; value: faces surrounding it
 
 const process_img = (img) => {
@@ -112,7 +125,21 @@ const process_img = (img) => {
     const data = frame.data;
     canvas.setAttribute("id", "original");
     
-    
+    const height = h + 10;
+    const width = w + 10;
+
+    let total = 0;
+    for (let y = 0; y < (height); ++y) {
+      for (let x = 0; x < (width); ++x) {
+        const i = ((width)*y + x) << 2;
+        const [r, g, b, a] = [0, 1, 2, 3].map(j => data[i + j]);
+        total += (r+g+b);
+      };
+    };
+    const avg = total/(3*(h+10)*(w+10)); // avg pixel value
+    let thres = 200;
+    if (avg > 250) {thres = 240;}
+
     for (let y = 0; y < (h+10); ++y) {
         pic[y] = [];
         for (let x = 0; x < (w+10); ++x) {
@@ -122,7 +149,7 @@ const process_img = (img) => {
             //changes to white if avg is more than a value
             // value for checking against fold files = 240
             // normal values = 200?
-            const v = (Math.floor((r + g + b)/3) > 200) ? 255 : 0;
+            const v = (Math.floor((r + g + b)/3) > thres) ? 255 : 0;
             
             const color = [v, v, v, 255];
             color.forEach((c, j) => data[i + j] = c);
@@ -270,12 +297,12 @@ let v = new Map; // key: vertex number; value: array of pixel coords
 const countVertices = () => {
   v.clear();
   graph.clear();
-  let checked = new Set;
-  let vertexNum = 1;
+  let vertexNum = 0;
   for (const p of vertices) {
-    if (checked.has(`${p[0]}c${p[1]}`)) {continue};
+    if (!verticesSet.has(`${p[0]}c${p[1]}`)) {continue};
     let queue = [p];
     explored[p[0]][p[1]] = `v${vertexNum}`; // update pixel in the 2d array of the image
+    verticesSet.delete(`${p[0]}c${p[1]}`);
     let i = 0;
     v.set(vertexNum, [p]);
 
@@ -283,23 +310,21 @@ const countVertices = () => {
       let row = queue[i][0];
       let col = queue[i][1];
       i+=1;
-      //console.log(queue);
 
       let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
       for (const n of neighbours) {
         // coords of neighbour
         let nRow = n[0] + row;
         let nCol = n[1] + col;
-        //console.log([nRow, nCol]);
 
-        if (checked.has(`${nRow}c${nCol}`)) {continue}; // check if pixel was seen before
+        // check if pixel was seen before
+        if (!verticesSet.has(`${nRow}c${nCol}`)) {continue};
 
-        if (verticesSet.has(`${nRow}c${nCol}`)) { // check if pixel exists in vertices
+        // check if pixel exists in vertices
           queue.push([nRow, nCol]);
           v.get(vertexNum).push([nRow, nCol]);
           explored[nRow][nCol] = `v${vertexNum}`;
-        };
-        checked.add(`${nRow}c${nCol}`);
+          verticesSet.delete(`${nRow}c${nCol}`);
       };
 
     };
@@ -346,24 +371,55 @@ const show = () => {
 };
 
 
-const connect = () => {
-  // maybe update the explored array to contain which vertex does the pixel belong to
-  //for each pixel in the vertices array, check which vertex it is in using explored
-  // then access that vertex and add new face if any face is not in there
-  for (const vertex_pixel of vertices) {
-    
-    let row = vertex_pixel[0];
-    let col = vertex_pixel[1];
-    if (explored[row][col] == true) {continue};
 
-    //console.log([row, col]);
-    let vertex_num = Number(explored[row][col].substring(1));
-    
-    let allFaces = graph.get(vertex_num);
 
-    for (const face of vertex_faces.get(`${row}c${col}`)) {
-      if (!allFaces.has(face)) {
-        allFaces.add(face);
+let connections = new Map;
+let graph2 = [];
+const connect2 = () => {
+  connections.clear();
+  let vertex_queue = [];
+  for (let num = 0; num < v.size; num++) {
+    connections.set(num, new Set);
+    vertex_queue.push(num);
+  };
+
+
+  for (const current_vertex of vertex_queue) {
+    //console.log(current_vertex); 
+    let first = v.get(current_vertex)[0];
+    let queue = [first];
+    let j = 0;
+    let checked = new Set([`${first[0]}c${first[1]}`]);
+
+    while (j < queue.length) {
+      let row = queue[j][0];
+      let col = queue[j][1];
+      j+=1;
+
+      let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+      for (const n of neighbours) {
+        // coords of neighbour
+        let nRow = n[0] + row;
+        let nCol = n[1] + col;
+        let ex = explored[nRow][nCol];
+
+        // skip if alr checked or if part of face
+        if (checked.has(`${nRow}c${nCol}`) || ex[0] == "f") {continue};
+
+        // add to queue and checked if edge pixel/part of current vertex
+        if (ex == true || ex == `v${current_vertex}`) {
+          checked.add(`${nRow}c${nCol}`);
+          queue.push([nRow, nCol]);
+          continue;
+        };
+
+        const new_vert = Number(ex.slice(1));
+        // add to connections if vertex not in there
+        if (!connections.get(current_vertex).has(new_vert) && !connections.get(new_vert).has(current_vertex)) {
+          connections.get(current_vertex).add(new_vert);
+          graph2.push(current_vertex < new_vert ? [current_vertex, new_vert] : [new_vert, current_vertex]);
+        };
+
       };
     };
   };
@@ -402,7 +458,7 @@ const highlight = (str) => {
 let coords = [];
 const shrink = () => {
   coords = [];
-  for (let vert = 1; vert < (v.size+1); vert++) {
+  for (let vert = 0; vert < v.size; vert++) {
     let row = 0;
     let col = 0;
     for (const p of v.get(vert)) {
@@ -430,8 +486,6 @@ const shrink = () => {
     };
 
     coords.push([centroid_row, centroid_col]);
-
-    
   };
 };
 
@@ -508,14 +562,12 @@ const shrink2 = () => { // TO DELETE IN FINAL VERSION
   
 };
 
-let corners = [];
+//let corners = [];
 
-const reval = () => {
-  let row_max = 0;
-  let col_max = 0;
-  let row_min = 500;
-  let col_min = 500;
-  for (let i = 1; i < v.size+1; i++) {
+const find_corners = (v) => {
+  // extract max and min of rows and cols
+  let [row_max, col_max, row_min, col_min] = [0, 0, 500, 500];
+  for (let i = 0; i < v.size; i++) {
     for (const p of v.get(i)) {
       if (p[0] > row_max) {row_max = p[0];}
       if (p[0] < row_min) {row_min = p[0];}
@@ -523,45 +575,11 @@ const reval = () => {
       if (p[1] < col_min) {col_min = p[1];}
     };
   };
-  corners = [[row_min, col_min], [row_min, col_max], [row_max, col_min], [row_max, col_max]];
-  /*
-  for (let i = 1; i < v.size+1; i++) {
-    const vertex = v.get(i);
-    let rows = [vertex[0], vertex[0]];
-    let cols = [vertex[0], vertex[0]];
-    for (const p of vertex) {
-      if (p[0] < rows[0][0]) {rows[0] = p;}
-      if (p[0] > rows[1][0]) {rows[1] = p;}
-      if (p[1] < cols[0][1]) {cols[0] = p;}
-      if (p[1] > cols[1][1]) {cols[1] = p;}
-    };
-    v_rows.push(rows);
-    v_cols.push(cols);
-  };
-  */
+  const corners = [[row_min, col_min], [row_min, col_max], [row_max, col_min], [row_max, col_max]];
+  return(corners);
 };
-const evaluate = () => {
-  
-  
-  let corners = [blackPixels[0]];
 
-  let img_corners = [[0, size[0]-1], [size[1]-1, 0], [size[1]-1, size[0]-1]];
-  for (const c of img_corners) {
-    const cRow = c[0];
-    const cCol = c[1];
-    console.log([cRow, cCol]);
-    
-    if (pic[cRow][cCol][0] == 0) {
-      corners.push(c);
-      continue;
-    };
-    
-    corners.push(find_vertex(cRow, cCol));
-  };
-  
-  console.log(corners);
-  //show_corners(img_corners);
-  
+const change_corners = (corners) => {
   // for removing any previously identified corner vertices
   for (const i of corners) {
     let has_vertex = false;
@@ -576,17 +594,97 @@ const evaluate = () => {
     };
     if (!has_vertex) {
       coords.push(i);
-      graph.set(graph.size+1, new Set);
+      v.set(v.size, [i]);
+      //graph.set(graph.size, new Set([0, find_face(i[0], i[1])]));
     };
   };
 };
 
-const find_vertex = (r, c) => {
+const find_boundary_vertices = (v) => {
+  // checks if each vertex is on the boundary (next to face 0)
+  const boundary = new Set;
+  for (let vert = 0; vert < v.size; vert++) {
+    const vert_coords = v.get(vert);
+    if (vert_coords.length == 1) {continue}; // skip over corner coords
+    for (const vertex_pixel of vert_coords) {
+      const row = vertex_pixel[0];
+      const col = vertex_pixel[1];
+      if (vertex_faces.get(`${row}c${col}`).has(0)) {
+        boundary.add(vert);
+        break;
+      };
+    };
+  }; 
+  return(boundary);
+};
+
+const shift_boundary = (boundary, corners) => {
+  // shift boundary coords
+  for (const b of boundary) {
+    const b_row = coords[b][0];
+    const b_col = coords[b][1];
+    const count = [0, 0, 0, 0];
+    
+    let a = 1;
+
+    while (a < 6) {
+      const neighbour = [[-a, 0], [a, 0], [0, -a], [0, a]]; // top, down, left, right
+      a+=1;
+      for (let i = 0; i < 4; i++) {
+        const nRow = b_row + neighbour[i][0];
+        const nCol = b_col + neighbour[i][1];
+        if (nRow < 0 || nRow > size[1]-1 || nCol < 0 || nCol > size[0]-1) {continue};
+        if (explored[nRow][nCol] == "f0") {
+          count[i] += 1;
+        };
+      };
+    };
+
+    let index = 0;
+    for (let i = 1; i < 4; i++) {
+      if (count[i] > count[index]) {index = i;}
+    };
+
+    switch (index) {
+      case 0: // top
+        coords[b][0] = corners[0][0]; // row_min
+        break;
+      case 1: // bottom
+        coords[b][0] = corners[3][0]; // row_max
+        break;
+      case 2: // left
+        coords[b][1] = corners[0][1]; // col_min
+        break;
+      case 3: //right
+        coords[b][1] = corners[3][1]; // col_max
+        break;
+    }; 
+  };
+};  
+
+const standardise_coords = (corners) => {
+  const height = corners[3][0] - corners[0][0];
+  const width = corners[3][1] - corners[0][1];
+  
+  
+  for (let i = 0; i < coords.length; i++) {
+    const new_row = (coords[i][0]-corners[0][0])/height;
+    const new_col = (coords[i][1]-corners[0][1])/width;
+    coords[i] = [new_col, new_row];
+  };
+  
+};
+
+
+// for finding the other face for corner vertices
+//MAYBE DELETE?
+const find_face = (r, c) => {
+  let face = 0;
   let vertex = [];
   let queue = [[r, c]];
   let i = 0;
   let checked = new Set([`${r}c${c}`]);
-  while (vertex.length == 0) {
+  while (face == 0) {
     // get pixel from queue
     let row = queue[i][0];
     let col = queue[i][1];
@@ -605,8 +703,8 @@ const find_vertex = (r, c) => {
       if (checked.has(`${nRow}c${nCol}`)) {continue};
 
 
-      if (pic[nRow][nCol] == 0) {
-        vertex.push(nRow, nCol);
+      if (explored[nRow][nCol][0] == "f" && explored[nRow][nCol][1] != "0") {
+        face = Number(explored[nRow][nCol].slice(1));
         break;
       };
 
@@ -615,7 +713,7 @@ const find_vertex = (r, c) => {
       queue.push([nRow, nCol]);
     };
   };
-  return(vertex);
+  return(face);
 };
 
 const show_vertices = () => {
@@ -657,6 +755,7 @@ const show_vertices = () => {
   context.putImageData(frame, 0, 0);
 };
 
+// DELETE IN FINAL
 const show_corners = (corners) => {
   const canvas = document.createElement("canvas");
   images.append(canvas);

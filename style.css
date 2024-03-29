@@ -20,7 +20,7 @@ input[type=number]{
 #images {
   display: block;
   position: absolute;
-  top: 100px;
+  top: 120px;
   left: 70px;
   margin: 5 auto;
 }

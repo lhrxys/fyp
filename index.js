@@ -128,6 +128,8 @@ const process_img = (img) => {
     const height = h + 10;
     const width = w + 10;
 
+    // determining average pixel colour across entire image
+    
     let total = 0;
     for (let y = 0; y < (height); ++y) {
       for (let x = 0; x < (width); ++x) {
@@ -137,18 +139,17 @@ const process_img = (img) => {
       };
     };
     const avg = total/(3*(h+10)*(w+10)); // avg pixel value
-    let thres = 200;
-    if (avg > 250) {thres = 240;}
-
+    let thres = avg >= 250 ? 240 : 200;
+    
+    
+    // changing image to black and white
     for (let y = 0; y < (h+10); ++y) {
         pic[y] = [];
         for (let x = 0; x < (w+10); ++x) {
             // turns the image into black and white (not greyscale)
             const i = ((w+10)*y + x) << 2;
             const [r, g, b, a] = [0, 1, 2, 3].map(j => data[i + j]);
-            //changes to white if avg is more than a value
-            // value for checking against fold files = 240
-            // normal values = 200?
+            //changes to white if avg is more than set thres
             const v = (Math.floor((r + g + b)/3) > thres) ? 255 : 0;
             
             const color = [v, v, v, 255];

@@ -25,7 +25,7 @@ window.onload = () => {
     countVertices(); // count number of vertices
     show(); // shows vertices in red
     connect();
-    //connect2();
+    //connect2();l
     //show_color();
     shrink();
     show_vertices();
@@ -58,7 +58,7 @@ window.onload = () => {
     shift_boundary(boundary, corners);
     show_vertices();
     standardise_coords(corners);
-    connect2();
+    connect();
     status.textContent = "Status: Ready for FOLD file export";
   };
 
@@ -66,11 +66,11 @@ window.onload = () => {
   exp.onclick = () => {
     let FOLD = {
       file_spec: 1.2,
-      file_creator: "",
+      file_creator: "FOLD Converter",
       file_title: `${input.files.item(0).name}`,
       file_classes: ["singleModel"],
       vertices_coords: coords,
-      edges_vertices: graph2,
+      edges_vertices: graph,
     };
   
     const data = new Blob([JSON.stringify(FOLD, undefined, 2)], {type: "application/json"});
@@ -91,7 +91,6 @@ let explored = []; // internal representation of image, updates the faces of whi
 let blackPixels = []; // array of all black pixels stored in [row, col]
 let vertices = []; // array of vertex coordinates
 let verticesSet = new Set; // same as vertices but in Set datastructure
-let graph = new Map; // key: vertex number; value: faces surrounding it
 
 const process_img = (img) => {
     pic = [];
@@ -375,9 +374,10 @@ const show = () => {
 
 
 let connections = new Map;
-let graph2 = [];
-const connect2 = () => {
+let graph = [];
+const connect = () => {
   connections.clear();
+  graph = [];
   let vertex_queue = [];
   for (let num = 0; num < v.size; num++) {
     connections.set(num, new Set);
@@ -418,7 +418,7 @@ const connect2 = () => {
         // add to connections if vertex not in there
         if (!connections.get(current_vertex).has(new_vert) && !connections.get(new_vert).has(current_vertex)) {
           connections.get(current_vertex).add(new_vert);
-          graph2.push(current_vertex < new_vert ? [current_vertex, new_vert] : [new_vert, current_vertex]);
+          graph.push(current_vertex < new_vert ? [current_vertex, new_vert] : [new_vert, current_vertex]);
         };
 
       };
@@ -426,7 +426,7 @@ const connect2 = () => {
   };
 };
 
-
+// not crucial to final code
 const highlight = (str) => {
   const a = str[0] == "f" ? faces : v;
   const num = Number(str.slice(1));
@@ -587,7 +587,7 @@ const change_corners = (corners) => {
     for (let j = 0; j < coords.length; j++) { // checks dist from corner pixel to vertex pixel
       const p = coords[j];
       const dist = Math.sqrt((p[0]-i[0])**2 + (p[1]-i[1])**2);
-      if (dist < 20) { // if too close, remove the vertex pixel and replace with corner pixel
+      if (dist < 10) { // if too close, remove the vertex pixel and replace with corner pixel
         has_vertex = true;
         coords[j] = i;
         break;

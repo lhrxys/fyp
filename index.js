@@ -296,7 +296,6 @@ const check = (thres) => { // checks which black pixels are vertices for given t
 let v = new Map; // key: vertex number; value: array of pixel coords
 const countVertices = () => {
   v.clear();
-  graph.clear();
   let vertexNum = 0;
   for (const p of vertices) {
     if (!verticesSet.has(`${p[0]}c${p[1]}`)) {continue};
@@ -337,7 +336,7 @@ const countVertices = () => {
       v.delete(vertexNum);
       continue;
     };
-    graph.set(vertexNum, new Set);
+    //graph.set(vertexNum, new Set);
     vertexNum += 1;
   };
   return v.size;

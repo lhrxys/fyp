@@ -17,20 +17,6 @@ window.onload = () => {
     
   };
 
-  /*
-  const process_button = document.getElementById("process");
-  process_button.onclick = () => {
-    const input_thres = document.getElementById("threshold").value;
-    check(input_thres); // check which black pixels can be vertices
-    countVertices(); // count number of vertices
-    show(); // shows vertices in red
-    connect();
-    //connect2();l
-    //show_color();
-    shrink();
-    show_vertices();
-  };
-  */
 
   const find_thres = document.getElementById("find");
   find_thres.onclick = () => {
@@ -602,7 +588,6 @@ const standardise_coords = (corners) => {
   
 };
 
-
 const show_vertices = () => {
   const canvas = document.createElement("canvas");
   images.append(canvas);
@@ -626,7 +611,7 @@ const show_vertices = () => {
     red.forEach((c, j) => data[p + j] = c);
   };
 
-  
+  /*
   for (let vert = 1; vert < (others.size+1); vert++) {
     for (const p of others.get(vert)) {
       const row = p[0];
@@ -637,7 +622,7 @@ const show_vertices = () => {
       red.forEach((c, j) => data[pix + j] = c);
     };
   };
-
+  */
   
   context.putImageData(frame, 0, 0);
 };

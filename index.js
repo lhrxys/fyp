@@ -138,9 +138,9 @@ const process_img = (img) => {
       };
     };
     const avg = total/(3*(h+10)*(w+10)); // avg pixel value
-    let thres = avg >= 250 ? 240 : 200;
-    
-    
+    console.log(avg);
+    //let thres = avg >= 250 ? 240 : 200;
+    let thres = avg >= 250 ? avg - 10 : avg - 20;
     // changing image to black and white
     for (let y = 0; y < (h+10); ++y) {
         pic[y] = [];
@@ -425,7 +425,7 @@ const connect = () => {
   };
 };
 
-// not crucial to final code
+// for debugging
 const highlight = (str) => {
   const a = str[0] == "f" ? faces : v;
   const num = Number(str.slice(1));
@@ -490,79 +490,6 @@ const shrink = () => {
 };
 
 
-let coord2 = [];
-let others = new Map;
-const shrink2 = () => { // TO DELETE IN FINAL VERSION
-  coord2 = [];
-  /*
-  for (let vert = 1; vert < (v.size+1); vert++) {
-    let pixel = [];
-    let largest_dist = 0;
-    others.set(vert, []);
-    for (const p of v.get(vert)) {
-      const r = p[0];
-      const c = p[1];
-      let queue = [[r, c, 0]];
-      let checked = new Set([`${r}c${c}`]);
-      let i = 0;
-      let d = 0;
-      let found = false;
-
-      while (!found) {
-        let row = queue[i][0];
-        let col = queue[i][1];
-        d = queue[i][2];
-        i+=1;
-
-        let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-        for (const n of neighbours) {
-          // coords of neighbour
-          let nRow = n[0] + row;
-          let nCol = n[1] + col;
-          // if exists, check if in queue/checked already
-          if (checked.has(`${nRow}c${nCol}`)){continue};
-
-          if (pic[nRow][nCol] == 255) {
-            d+=1;
-            found = true;
-            break;
-          };
-
-          checked.add(`${nRow}c${nCol}`);
-          queue.push([nRow, nCol, d+1]);
-        };
-      };
-      if (d > largest_dist) {
-        largest_dist = d;
-        pixel = [r, c];
-      };
-      
-      if (d == largest_dist) {
-        others.get(vert).push([r, c]);
-      };
-    };
-    coord2.push(pixel);
-  };
-  return(coord2);
-  */
-
-  
-  for (let vert = 1; vert < (v.size+1); vert++) {
-    let rows = [];
-    let cols = [];
-    for (const p of v.get(vert)) {
-      rows.push(p[0]);
-      cols.push(p[1]);
-    };
-    rows.toSorted((a, b) => a-b);
-    cols.toSorted((a, b) => a-b);
-    const middle = Math.floor(v.get(vert).length/2);
-    coord2.push([rows[middle], cols[middle]]);
-  };
-  
-};
-
-//let corners = [];
 
 const find_corners = (v) => {
   // extract max and min of rows and cols
@@ -595,7 +522,6 @@ const change_corners = (corners) => {
     if (!has_vertex) {
       coords.push(i);
       v.set(v.size, [i]);
-      //graph.set(graph.size, new Set([0, find_face(i[0], i[1])]));
     };
   };
 };
@@ -627,7 +553,7 @@ const shift_boundary = (boundary, corners) => {
     
     let a = 1;
 
-    while (a < 6) {
+    while (a < 10) {
       const neighbour = [[-a, 0], [a, 0], [0, -a], [0, a]]; // top, down, left, right
       a+=1;
       for (let i = 0; i < 4; i++) {
@@ -645,6 +571,7 @@ const shift_boundary = (boundary, corners) => {
       if (count[i] > count[index]) {index = i;}
     };
 
+    console.log([b, index]);
     switch (index) {
       case 0: // top
         coords[b][0] = corners[0][0]; // row_min
@@ -675,46 +602,6 @@ const standardise_coords = (corners) => {
   
 };
 
-
-// for finding the other face for corner vertices
-//MAYBE DELETE?
-const find_face = (r, c) => {
-  let face = 0;
-  let vertex = [];
-  let queue = [[r, c]];
-  let i = 0;
-  let checked = new Set([`${r}c${c}`]);
-  while (face == 0) {
-    // get pixel from queue
-    let row = queue[i][0];
-    let col = queue[i][1];
-    i += 1;
-
-    let neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-    for (const n of neighbours) {
-      // coords of neighbour
-      let nRow = n[0] + row;
-      let nCol = n[1] + col;
-
-      // check if pixel exists
-      if (nRow < 0 || nRow > size[1]-1 || nCol < 0 || nCol > size[0]-1) {continue};
-      
-      // if exists, check if in queue/checked already
-      if (checked.has(`${nRow}c${nCol}`)) {continue};
-
-
-      if (explored[nRow][nCol][0] == "f" && explored[nRow][nCol][1] != "0") {
-        face = Number(explored[nRow][nCol].slice(1));
-        break;
-      };
-
-      // add to queue
-      checked.add(`${nRow}c${nCol}`);
-      queue.push([nRow, nCol]);
-    };
-  };
-  return(face);
-};
 
 const show_vertices = () => {
   const canvas = document.createElement("canvas");
@@ -752,32 +639,5 @@ const show_vertices = () => {
   };
 
   
-  context.putImageData(frame, 0, 0);
-};
-
-// DELETE IN FINAL
-const show_corners = (corners) => {
-  const canvas = document.createElement("canvas");
-  images.append(canvas);
-  canvas.width = size[0];
-  canvas.height = size[1];
-  canvas.style.margin = "2px";
-    
-  const context = canvas.getContext("2d");
-  const orig = document.getElementById("original");
-  context.drawImage(orig, 0, 0);
-    
-  const frame = context.getImageData(0, 0, size[0], size[1]);
-  const data = frame.data;
-
-  for (let i = 0; i < corners.length; i++) {
-    const row = corners[i][0];
-    const col = corners[i][1];
-    
-    const p = (size[0]*row + col) << 2;
-    const red = [255, 0, 0, 255];
-    red.forEach((c, j) => data[p + j] = c);
-  };
-    
   context.putImageData(frame, 0, 0);
 };
